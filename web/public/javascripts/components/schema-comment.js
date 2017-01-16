@@ -276,11 +276,7 @@ App.SchemaCommentComponent = Ember.Component.extend({
     , function(data){
         var comments = data.data.comments
         comments.forEach(function(cmnt){
-          cmnt.isAuthor = false
-          cmnt.html = marked(cmnt.text).htmlSafe()
-          if(cmnt.authorUsername === $("#username").text().trim()) {
-            cmnt.isAuthor = true
-          }
+          cmnt.html = marked(cmnt.text).htmlSafe();
         })
         _this.set('comments', comments)
         _this.set('page', data.data.page)
@@ -497,7 +493,10 @@ App.SchemaCommentComponent = Ember.Component.extend({
           })
           .on('hidden.bs.modal', function(){
             _this.set('propModal', false)
-            _this.sendAction('getSchema')
+            if (_this.parentView && _this.parentView.controller)
+            {
+              _this.parentView.controller.send('getSchema')
+            }
             $("#datasetSchemaColumnCommentModal").modal('hide');
           })
       }, 300)

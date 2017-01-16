@@ -28,6 +28,9 @@ public class Constant {
   /** The property_name field in wh_property table. Location of the folder that store interim csv file. */
   public static final String WH_APP_FOLDER_KEY = "wherehows.app_folder";
 
+  /** The property_name for logback CONTEXT_NAME. Used to set/fetch the system property */
+  public static final String LOGGER_CONTEXT_NAME_KEY = "CONTEXT_NAME";
+
   // For property_name in wh_etl_job_property table
   // Lineage
   /** The property_name field in wh_etl_job_property table. Azkaban database connection info */
@@ -90,6 +93,8 @@ public class Constant {
   public static final String TD_DEFAULT_DATABASE_KEY = "teradata.default_database";
   /** Optional. The property_name field in wh_etl_job_property table. Decide whether load sample data or not */
   public static final String TD_LOAD_SAMPLE = "teradata.load_sample";
+  /** The property_name field in wh_etl_job_property table. Collect sample data collection only for certain weekdays */
+  public static final String TD_COLLECT_SAMPLE_DATA_DAYS = "teradata.collect.sample.data.days";
 
   // Hdfs
   /** The property_name field in wh_etl_job_property table. Whether using remote mode or not */
@@ -110,7 +115,7 @@ public class Constant {
   public static final String HDFS_SAMPLE_LOCAL_PATH_KEY = "hdfs.local.sample";
   /** The property_name field in wh_etl_job_property table. The hfds sample data file location store on remote hadoop gateway */
   public static final String HDFS_SAMPLE_REMOTE_PATH_KEY = "hdfs.remote.sample";
-  /** The property_name field in wh_etl_job_property table. Hadoop cluster name */
+  /** The property_name field in wh_etl_job_property table. Hadoop cluster name in short form */
   public static final String HDFS_CLUSTER_KEY = "hdfs.cluster";
   /** The property_name field in wh_etl_job_property table. The list of directories as a start point to fetch metadata.
    * (include all of their sub directories) */
@@ -126,6 +131,8 @@ public class Constant {
   public static final String HDFS_FILE_SOURCE_MAP_KEY = "hdfs.file_path_regex_source_map";
   /** The property_name field in wh_etl_job_property table. Keytab file location */
   public static final String HDFS_REMOTE_KEYTAB_LOCATION_KEY = "hdfs.remote.keytab.location";
+  /** The property_name field in wh_etl_job_property table. hdfs default uri (IPC) */
+  public static final String HDFS_NAMENODE_IPC_URI_KEY = "hdfs.namenode.ipc.uri";
 
   /** The property_name field in wh_etl_job_property table. For dataset owner ETL. The hfds location to copy files */
   public static final String HDFS_REMOTE_WORKING_DIR = "hdfs.remote.working.dir";
@@ -167,12 +174,18 @@ public class Constant {
   public static final String HIVE_METASTORE_PASSWORD = "hive.metastore.password";
 
   public static final String HIVE_DATABASE_WHITELIST_KEY = "hive.database_white_list";
+  public static final String HIVE_DATABASE_BLACKLIST_KEY = "hive.database_black_list";
   public static final String HIVE_SCHEMA_JSON_FILE_KEY = "hive.schema_json_file";
   public static final String HIVE_DEPENDENCY_CSV_FILE_KEY = "hive.dependency_csv_file";
   public static final String HIVE_INSTANCE_CSV_FILE_KEY = "hive.instance_csv_file";
-  // public static final String HIVE_SAMPLE_CSV_FILE_KEY = "hive.sample_csv";
+  public static final String HIVE_SAMPLE_CSV_FILE_KEY = "hive.sample_csv_file";
   public static final String HIVE_SCHEMA_CSV_FILE_KEY = "hive.schema_csv_file";
+  public static final String HIVE_HDFS_MAP_CSV_FILE_KEY = "hive.hdfs_map_csv_file";
   public static final String HIVE_FIELD_METADATA_KEY = "hive.field_metadata";
+
+  public static final String KERBEROS_AUTH_KEY = "kerberos.auth";
+  public static final String KERBEROS_PRINCIPAL_KEY = "kerberos.principal";
+  public static final String KERBEROS_KEYTAB_FILE_KEY = "kerberos.keytab.file";
 
   /** Property name of app id. For ETL process. ETL process will use this to identify the application */
   public static final String APP_ID_KEY = "app.id";
@@ -183,6 +196,7 @@ public class Constant {
 
   public static final String WH_ELASTICSEARCH_URL_KEY = "wh.elasticsearch.url";
   public static final String WH_ELASTICSEARCH_PORT_KEY = "wh.elasticsearch.port";
+  public static final String WH_ELASTICSEARCH_INDEX_KEY = "wh.elasticsearch.index";
 
   // Oracle
   public static final String ORA_DB_USERNAME_KEY = "oracle.db.username";
@@ -194,4 +208,17 @@ public class Constant {
   public static final String ORA_SAMPLE_OUTPUT_KEY = "oracle.sample_data";
   public static final String ORA_LOAD_SAMPLE = "oracle.load_sample";
   public static final String ORA_EXCLUDE_DATABASES_KEY = "oracle.exclude_db";
+
+  // Multiproduct
+  public static final String MULTIPRODUCT_SERVICE_URL = "multiproduct.service.url";
+  public static final String GIT_URL_PREFIX = "git.url.prefix";
+  public static final String SVN_URL_PREFIX = "svn.url.prefix";
+  public static final String GIT_PROJECT_OUTPUT_KEY = "git.project.metadata";
+  public static final String PRODUCT_REPO_OUTPUT_KEY = "product.repo.metadata";
+  public static final String PRODUCT_REPO_OWNER_OUTPUT_KEY = "product.repo.owner";
+
+  // code search
+  public static final String DATABASE_SCM_REPO_OUTPUT_KEY = "database.scm.repo";
+  public static final String BASE_URL_KEY = "base.url.key";
+
 }

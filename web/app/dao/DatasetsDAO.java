@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.*;
 import java.text.SimpleDateFormat;
 
@@ -38,11 +39,8 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import play.Logger;
 import play.Play;
-import play.libs.F;
 import play.libs.Json;
 import models.*;
-import play.libs.WS;
-import utils.Lineage;
 
 public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 {
@@ -159,7 +157,8 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 			"c.id = ddfc.comment_id WHERE dfd.dataset_id = ? AND dfd.field_id = ? ORDER BY dfd.sort_id";
 
 	private final static String GET_DATASET_OWNERS_BY_ID = "SELECT o.owner_id, u.display_name, o.sort_id, " +
-			"o.owner_type, o.namespace, o.is_group, o.owner_sub_type FROM dataset_owner o " +
+			"o.owner_type, o.namespace, o.owner_id_type, o.owner_source, o.owner_sub_type, o.confirmed_by " +
+			"FROM dataset_owner o " +
 			"LEFT JOIN dir_external_user_info u on (o.owner_id = u.user_id and u.app_id = 300) " +
 			"WHERE o.dataset_id = ? and (o.is_deleted is null OR o.is_deleted != 'Y') ORDER BY o.sort_id";
 
@@ -207,6 +206,14 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 			"ON DUPLICATE KEY UPDATE owner_type = ?, is_group = ?, is_deleted = 'N', " +
 			"sort_id = ?, modified_time= UNIX_TIMESTAMP(), owner_sub_type=?";
 
+	private final static String UPDATE_DATASET_CONFIRMED_OWNERS = "INSERT INTO dataset_owner " +
+			"(dataset_id, owner_id, app_id, namespace, owner_type, is_group, is_active, " +
+			"is_deleted, sort_id, created_time, modified_time, wh_etl_exec_id, dataset_urn, owner_sub_type, " +
+			"confirmed_by, confirmed_on) " +
+			"VALUES(?, ?, ?, ?, ?, ?, 'Y', 'N', ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0, ?, ?, ?, ?) " +
+			"ON DUPLICATE KEY UPDATE owner_type = ?, is_group = ?, is_deleted = 'N', " +
+			"sort_id = ?, modified_time= UNIX_TIMESTAMP(), owner_sub_type=?, confirmed_by=?, confirmed_on=?";
+
 	private final static String MARK_DATASET_OWNERS_AS_DELETED = "UPDATE dataset_owner " +
 			"set is_deleted = 'Y' WHERE dataset_id = ?";
 
@@ -223,7 +230,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 			"(text, user_id, dataset_id, created, modified, comment_type) VALUES(?, ?, ?, NOW(), NOW(), ?)";
 
 	private final static String GET_WATCHED_URN_ID = "SELECT id FROM watch " +
-			"WHERE user_id = ? and item_type = 'urn' and urn = '$URN'";
+			"WHERE user_id = ? and item_type = 'urn' and urn = ?";
 
 	private final static String GET_WATCHED_DATASET_ID = "SELECT id FROM watch " +
 			"WHERE user_id = ? and item_id = ? and item_type = 'dataset'";
@@ -350,6 +357,19 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 	private final static String GET_DATASET_INSTANCES = "SELECT DISTINCT i.db_id, c.db_code FROM " +
 			"dict_dataset_instance i JOIN cfg_database c ON i.db_id = c.db_id " +
 			"WHERE i.dataset_id = ?";
+
+	private final static String GET_DATASET_ACCESS_PARTITION_GAIN = "SELECT DISTINCT partition_grain " +
+			"FROM log_dataset_instance_load_status WHERE dataset_id = ? order by 1";
+
+	private final static String GET_DATASET_ACCESS_PARTITION_INSTANCES = "SELECT DISTINCT d.db_code " +
+			"FROM log_dataset_instance_load_status l " +
+			"JOIN cfg_database d on l.db_id = d.db_id WHERE dataset_id = ? and partition_grain = ? ORDER BY 1";
+
+	private final static String GET_DATASET_ACCESS = "SELECT l.db_id, d.db_code, l.dataset_type, l.partition_expr, " +
+			"l.data_time_expr, l.data_time_epoch, l.record_count, l.size_in_byte, l.log_time_epoch, " +
+			"from_unixtime(l.log_time_epoch) as log_time_str FROM log_dataset_instance_load_status l " +
+			"JOIN cfg_database d on l.db_id = d.db_id WHERE dataset_id = ? and partition_grain = ? " +
+			"ORDER by l.data_time_expr DESC";
 
 	public static List<String> getDatasetOwnerTypes()
 	{
@@ -930,7 +950,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 		return result;
 	}
 
-	public static ObjectNode getPagedDatasetComments(int id, int page, int size)
+	public static ObjectNode getPagedDatasetComments(String userName, int id, int page, int size)
 	{
 		ObjectNode result = Json.newObject();
 
@@ -954,6 +974,17 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 							Long.class);
 				} catch (EmptyResultDataAccessException e) {
 					Logger.error("Exception = " + e.getMessage());
+				}
+
+				if (pagedComments != null)
+				{
+					for(DatasetComment dc : pagedComments)
+					{
+						if(StringUtils.isNotBlank(userName) && userName.equalsIgnoreCase(dc.authorUserName))
+						{
+							dc.isAuthor = true;
+						}
+					}
 				}
 
 				ObjectNode resultNode = Json.newObject();
@@ -1061,7 +1092,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 		if (userId != null && userId !=0)
 		{
 			List<Map<String, Object>> rows = null;
-			rows = getJdbcTemplate().queryForList(GET_WATCHED_URN_ID.replace("$URN", urn), userId);
+			rows = getJdbcTemplate().queryForList(GET_WATCHED_URN_ID, userId, urn);
 			if (rows != null)
 			{
 				for (Map row : rows) {
@@ -1120,7 +1151,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 			rows = getJdbcTemplate().queryForList(GET_WATCHED_DATASET_ID, userId, datasetId);
 			if (rows != null && rows.size() > 0)
 			{
-				message = "watch item is already exist";
+				message = "watch item already exist";
 			}
 			else
 			{
@@ -1214,7 +1245,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 		if (userId != null && userId !=0)
 		{
 			List<Map<String, Object>> rows = null;
-			rows = getJdbcTemplate().queryForList(GET_WATCHED_URN_ID.replace("$URN", urn), userId);
+			rows = getJdbcTemplate().queryForList(GET_WATCHED_URN_ID, userId, urn);
 			if (rows != null && rows.size() > 0)
 			{
 				message = "watch item is already exist";
@@ -1243,7 +1274,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 		return message;
 	}
 
-	public static ObjectNode getPagedDatasetColumnComments(int datasetId, int columnId, int page, int size)
+	public static ObjectNode getPagedDatasetColumnComments(String userName, int datasetId, int columnId, int page, int size)
 	{
 		ObjectNode result = Json.newObject();
 
@@ -1297,6 +1328,17 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 				}
 				catch (EmptyResultDataAccessException e) {
 					Logger.error("Exception = " + e.getMessage());
+				}
+
+				if (pagedComments != null)
+				{
+					for(DatasetColumnComment dc : pagedComments)
+					{
+						if(StringUtils.isNotBlank(userName) && userName.equalsIgnoreCase(dc.authorUsername))
+						{
+							dc.isAuthor = true;
+						}
+					}
 				}
 
 				resultNode.set("comments", Json.toJson(pagedComments));
@@ -1646,7 +1688,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 
 	public static void updateDatasetOwnerDatabase(int datasetId, String datasetUrn, List<DatasetOwner> owners)
 	{
-		getJdbcTemplate().batchUpdate(UPDATE_DATASET_OWNERS,
+		getJdbcTemplate().batchUpdate(UPDATE_DATASET_CONFIRMED_OWNERS,
 				new BatchPreparedStatementSetter() {
 					@Override
 					public void setValues(PreparedStatement ps, int i)
@@ -1661,10 +1703,25 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 						ps.setInt(7, owner.sortId);
 						ps.setString(8, datasetUrn);
 						ps.setString(9, owner.subType);
-						ps.setString(10, owner.type);
-						ps.setString(11, owner.isGroup ? "Y" : "N");
-						ps.setInt(12, owner.sortId);
-						ps.setString(13, owner.subType);
+						ps.setString(10, owner.confirmedBy);
+						if (StringUtils.isBlank(owner.confirmedBy))
+						{
+							ps.setLong(11, 0L);
+						} else {
+							ps.setLong(11, Instant.now().getEpochSecond());
+						}
+						ps.setString(12, owner.type);
+						ps.setString(13, owner.isGroup ? "Y" : "N");
+						ps.setInt(14, owner.sortId);
+						ps.setString(15, owner.subType);
+						ps.setString(16, owner.confirmedBy);
+						if (StringUtils.isBlank(owner.confirmedBy))
+						{
+							ps.setLong(17, 0L);
+						} else {
+							ps.setLong(17, Instant.now().getEpochSecond());
+						}
+
 					}
 
 					@Override
@@ -1719,6 +1776,12 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 							subType = ownerNode.get("subType").asText();
 						}
 
+						String confirmedBy = "";
+						if (ownerNode.has("confirmedBy") && (!ownerNode.get("confirmedBy").isNull()))
+						{
+							confirmedBy = ownerNode.get("confirmedBy").asText();
+						}
+
 						DatasetOwner owner = new DatasetOwner();
 						owner.userName = userName;
 						owner.isGroup = isGroup;
@@ -1732,6 +1795,7 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 						}
 						owner.type = type;
 						owner.subType = subType;
+						owner.confirmedBy = confirmedBy;
 						owner.sortId = i;
 						owners.add(owner);
 					}
@@ -1984,5 +2048,104 @@ public class DatasetsDAO extends AbstractMySQLOpenSourceDAO
 			}
 		}
 		return datasetInstances;
+	}
+
+	public static List<String> getDatasetPartitionGains(Long id) {
+		return getJdbcTemplate().queryForList(GET_DATASET_ACCESS_PARTITION_GAIN, String.class, id);
+	}
+
+	public static List<String> getDatasetPartitionInstance(Long id, String partition) {
+		return getJdbcTemplate().queryForList(GET_DATASET_ACCESS_PARTITION_INSTANCES, String.class, id, partition);
+	}
+
+	public static List<DatasetPartition> getDatasetAccessibilty(Long id) {
+
+		ObjectNode resultNode = Json.newObject();
+		List<String> partitions = getDatasetPartitionGains(id);
+		List<DatasetPartition> datasetPartitions = new ArrayList<DatasetPartition>();
+		if (partitions != null && partitions.size() > 0)
+		{
+			for(String partition:partitions)
+			{
+				List<Map<String, Object>> rows = null;
+				Map<String, DatasetAccessibility> addedAccessibilities= new HashMap<String, DatasetAccessibility>();
+				rows = getJdbcTemplate().queryForList(
+						GET_DATASET_ACCESS,
+						id,
+						partition);
+				List<DatasetAccessibility> datasetAccessibilities = new ArrayList<DatasetAccessibility>();
+				List<String> instances = new ArrayList<String>();
+				instances = getDatasetPartitionInstance(id, partition);
+
+				if (rows != null)
+				{
+					for (Map row : rows) {
+						DatasetAccessibility datasetAccessibility = new DatasetAccessibility();
+						datasetAccessibility.datasetId = id;
+						datasetAccessibility.itemList = new ArrayList<DatasetAccessItem>();
+						datasetAccessibility.dbId = (Integer) row.get("db_id");
+						datasetAccessibility.dbName = (String) row.get("db_code");
+						datasetAccessibility.datasetType = (String) row.get("dataset_type");
+						datasetAccessibility.partitionExpr = (String) row.get("partition_expr");
+						datasetAccessibility.partitionGain = partition;
+						datasetAccessibility.dataTimeExpr = (String) row.get("data_time_expr");
+						datasetAccessibility.dataTimeEpoch = (Integer) row.get("data_time_epoch");
+						datasetAccessibility.recordCount = (Long) row.get("record_count");
+						if (datasetAccessibility.recordCount == null)
+						{
+							datasetAccessibility.recordCount = 0L;
+						}
+						datasetAccessibility.sizeInByte = (Long) row.get("size_in_byte");
+						datasetAccessibility.logTimeEpoch = (Integer) row.get("log_time_epoch");
+						datasetAccessibility.logTimeEpochStr = row.get("log_time_str").toString();
+						DatasetAccessibility exist = addedAccessibilities.get(datasetAccessibility.dataTimeExpr);
+						if (exist == null)
+						{
+							for(int i = 0; i < instances.size(); i++)
+							{
+								DatasetAccessItem datasetAccessItem = new DatasetAccessItem();
+								if(instances.get(i).equalsIgnoreCase(datasetAccessibility.dbName))
+								{
+									datasetAccessItem.recordCountStr = Long.toString(datasetAccessibility.recordCount);
+									datasetAccessItem.logTimeEpochStr = datasetAccessibility.logTimeEpochStr;
+									datasetAccessItem.isPlaceHolder = false;
+								}
+								else
+								{
+									datasetAccessItem.recordCountStr = "";
+									datasetAccessItem.logTimeEpochStr = "";
+									datasetAccessItem.isPlaceHolder = true;
+								}
+								datasetAccessibility.itemList.add(datasetAccessItem);
+							}
+							addedAccessibilities.put(datasetAccessibility.dataTimeExpr, datasetAccessibility);
+							datasetAccessibilities.add(datasetAccessibility);
+						}
+						else
+						{
+							for(int i = 0; i < instances.size(); i++)
+							{
+								if(instances.get(i).equalsIgnoreCase(datasetAccessibility.dbName))
+								{
+									DatasetAccessItem datasetAccessItem = new DatasetAccessItem();
+									datasetAccessItem.logTimeEpochStr = datasetAccessibility.logTimeEpochStr;
+									datasetAccessItem.recordCountStr = Long.toString(datasetAccessibility.recordCount);
+									datasetAccessItem.isPlaceHolder = false;
+									exist.itemList.set(i, datasetAccessItem);
+								}
+							}
+						}
+					}
+				}
+				DatasetPartition datasetPartition = new DatasetPartition();
+				datasetPartition.datasetId = id;
+				datasetPartition.accessibilityList = datasetAccessibilities;
+				datasetPartition.instanceList = instances;
+				datasetPartition.partition = partition;
+				datasetPartitions.add(datasetPartition);
+			}
+		}
+
+		return datasetPartitions;
 	}
 }

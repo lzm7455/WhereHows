@@ -50,7 +50,7 @@ CREATE TABLE `wh_etl_job_execution` (
   COMMENT 'id of the etl job',
   `status`         VARCHAR(31)                  DEFAULT NULL
   COMMENT 'status of etl job execution',
-  `request_time`     INT(10) UNSIGNED             DEFAULT NULL
+  `request_time`   INT(10) UNSIGNED             DEFAULT NULL
   COMMENT 'request time of the execution',
   `start_time`     INT(10) UNSIGNED             DEFAULT NULL
   COMMENT 'start time of the execution',
@@ -58,6 +58,10 @@ CREATE TABLE `wh_etl_job_execution` (
   COMMENT 'end time of the execution',
   `message`        VARCHAR(1024)                DEFAULT NULL
   COMMENT 'debug information message',
+  `host_name`      VARCHAR(200)                 DEFAULT NULL
+  COMMENT 'host machine name of the job execution',
+  `process_id`     INT UNSIGNED                 DEFAULT NULL
+  COMMENT 'job execution process id',
   PRIMARY KEY (`wh_etl_exec_id`)
 )
   ENGINE = InnoDB
@@ -120,10 +124,10 @@ CREATE TABLE `cfg_application` (
   ENGINE = InnoDB
   DEFAULT CHARSET = utf8;
 
-CREATE TABLE cfg_database  ( 
+CREATE TABLE cfg_database  (
 	db_id                  	smallint(6) UNSIGNED NOT NULL,
 	db_code                	varchar(30) COMMENT 'Unique string without space'  NOT NULL,
-	primary_dataset_type    varchar(30) COMMENT 'What type of dataset this DB supports' NOT NULL DEFAULT '*', 
+	primary_dataset_type    varchar(30) COMMENT 'What type of dataset this DB supports' NOT NULL DEFAULT '*',
 	description            	varchar(128) NOT NULL,
 	is_logical             	char(1) COMMENT 'Is a group, which contains multiple physical DB(s)'  NOT NULL DEFAULT 'N',
 	deployment_tier        	varchar(20) COMMENT 'Lifecycle/FabricGroup: local,dev,sit,ei,qa,canary,preprod,pr'  NULL DEFAULT 'prod',
@@ -138,15 +142,16 @@ CREATE TABLE cfg_database  (
 	jdbc_url               	varchar(1000) NULL,
 	uri                    	varchar(1000) NULL,
 	short_connection_string	varchar(50) COMMENT 'Oracle TNS Name, ODBC DSN, TDPID...' NULL,
-	last_modified          	timestamp NOT NULL,
+  last_modified          	timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	PRIMARY KEY(db_id),
-        UNIQUE KEY `uix_cfg_database__dbcode` (db_code) USING HASH
+  UNIQUE KEY `uix_cfg_database__dbcode` (db_code) USING HASH
 )
 ENGINE = InnoDB
 DEFAULT CHARSET = utf8
 COMMENT = 'Abstract different storage instances as databases' ;
 
-CREATE TABLE stg_cfg_object_name_map  ( 
+
+CREATE TABLE stg_cfg_object_name_map  (
 	object_type             	varchar(100) NOT NULL,
 	object_sub_type         	varchar(100) NULL,
 	object_name             	varchar(350) NOT NULL,
@@ -160,18 +165,16 @@ CREATE TABLE stg_cfg_object_name_map  (
 	mapped_object_urn       	varchar(350) NULL,
 	mapped_object_dataset_id	int(11) UNSIGNED NULL,
 	description             	varchar(500) NULL,
-	last_modified           	timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY(object_name,mapped_object_name)
+	last_modified           	timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	PRIMARY KEY(object_name, mapped_object_name),
+  KEY idx_stg_cfg_object_name_map__mappedobjectname (mapped_object_name) USING BTREE
 )
 ENGINE = InnoDB
 CHARACTER SET latin1
 COLLATE latin1_swedish_ci
 COMMENT = 'Map alias (when is_identical_map=Y) and view dependency' ;
 
-CREATE INDEX idx_stg_cfg_object_name_map__mappedobjectname USING BTREE 
-	ON stg_cfg_object_name_map(mapped_object_name);
-
-CREATE TABLE cfg_object_name_map  ( 
+CREATE TABLE cfg_object_name_map  (
   obj_name_map_id         int(11) AUTO_INCREMENT NOT NULL,
   object_type             varchar(100) NOT NULL,
   object_sub_type         varchar(100) NULL,
@@ -184,38 +187,32 @@ CREATE TABLE cfg_object_name_map  (
   mapped_object_name      varchar(350) NOT NULL COMMENT 'this is the original/parent object',
   mapped_object_dataset_id	int(11) UNSIGNED NULL COMMENT 'can be the abstract dataset id for versioned objects',
   description             varchar(500) NULL,
-  last_modified           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY(obj_name_map_id)
+  last_modified           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY(obj_name_map_id),
+  KEY idx_cfg_object_name_map__mappedobjectname (mapped_object_name) USING BTREE,
+  CONSTRAINT uix_cfg_object_name_map__objectname_mappedobjectname UNIQUE (object_name, mapped_object_name)
 )
 ENGINE = InnoDB
 CHARACTER SET latin1
 AUTO_INCREMENT = 1
 COMMENT = 'Map alias (when is_identical_map=Y) and view dependency. Always map from Derived/Child (object) back to its Original/Parent (mapped_object)' ;
 
-ALTER TABLE cfg_object_name_map
-  ADD CONSTRAINT uix_cfg_object_name_map__objectname_mappedobjectname
-  UNIQUE (object_name, mapped_object_name);
 
-CREATE INDEX idx_cfg_object_name_map__mappedobjectname USING BTREE 
-  ON cfg_object_name_map(mapped_object_name);
-
-
-CREATE TABLE cfg_deployment_tier  ( 
+CREATE TABLE cfg_deployment_tier  (
   tier_id      	tinyint(4) NOT NULL,
   tier_code    	varchar(25) COMMENT 'local,dev,test,qa,stg,prod' NOT NULL,
   tier_label    varchar(50) COMMENT 'display full name' NULL,
   sort_id       smallint(6) COMMENT '3-digit for group, 3-digit within group' NOT NULL,
-  last_modified timestamp NOT NULL,
-  PRIMARY KEY(tier_id)
+  last_modified timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY(tier_id),
+  UNIQUE KEY uix_cfg_deployment_tier__tiercode (tier_code)
 )
 ENGINE = InnoDB
 AUTO_INCREMENT = 0
 COMMENT = 'http://en.wikipedia.org/wiki/Deployment_environment';
 
-CREATE UNIQUE INDEX uix_cfg_deployment_tier__tiercode
-	ON cfg_deployment_tier(tier_code);
 
-CREATE TABLE cfg_data_center  ( 
+CREATE TABLE cfg_data_center  (
 	data_center_id    	smallint(6) NOT NULL DEFAULT '0',
 	data_center_code  	varchar(30) NOT NULL,
 	data_center_name  	varchar(50) NOT NULL,
@@ -226,18 +223,16 @@ CREATE TABLE cfg_data_center  (
 	longtitude        	decimal(10,6) NULL,
 	latitude          	decimal(10,6) NULL,
 	data_center_status	char(1) COMMENT 'A,D,U' NULL,
-	last_modified     	timestamp NULL,
-	PRIMARY KEY(data_center_id)
+	last_modified     	timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	PRIMARY KEY(data_center_id),
+  UNIQUE KEY uix_cfg_data_center__datacentercode (data_center_code)
 )
 ENGINE = InnoDB
 AUTO_INCREMENT = 0
 COMMENT = 'https://en.wikipedia.org/wiki/Data_center' ;
 
-CREATE UNIQUE INDEX uix_cfg_data_center__datacentercode
-	ON cfg_data_center(data_center_code);
 
-
-CREATE TABLE cfg_cluster  ( 
+CREATE TABLE cfg_cluster  (
 	cluster_id    	        smallint(6) NOT NULL DEFAULT '0',
 	cluster_code  	        varchar(80) NOT NULL,
 	cluster_short_name      varchar(50) NOT NULL,
@@ -245,11 +240,15 @@ CREATE TABLE cfg_cluster  (
 	deployment_tier_code    varchar(25) NOT NULL,
 	data_center_code        varchar(30) NULL,
 	description             varchar(200) NULL,
-	last_modified     	timestamp NULL,
-	PRIMARY KEY(cluster_id)
+	last_modified     	timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	PRIMARY KEY(cluster_id),
+  UNIQUE KEY uix_cfg_cluster__clustercode (cluster_code)
 )
 COMMENT = 'https://en.wikipedia.org/wiki/Computer_cluster' ;
 
-CREATE UNIQUE INDEX uix_cfg_cluster__clustercode
-	ON cfg_cluster(cluster_code);
 
+CREATE TABLE IF NOT EXISTS cfg_search_score_boost (
+  `id` INT COMMENT 'dataset id',
+  `static_boosting_score` INT COMMENT 'static boosting score for elastic search',
+  PRIMARY KEY (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = latin1;

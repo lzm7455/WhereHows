@@ -19,8 +19,8 @@ from wherehows.common import Constant
 
 
 class HiveLoad:
-  def __init__(self):
-    self.logger = LoggerFactory.getLogger('jython script : ' + self.__class__.__name__)
+  def __init__(self, wh_etl_exec_id='0'):
+    self.logger = LoggerFactory.getLogger("%s[%s]" % (self.__class__.__name__, wh_etl_exec_id))
 
   def load_metadata(self):
     cursor = self.conn_mysql.cursor()
@@ -160,7 +160,7 @@ class HiveLoad:
           from stg_dict_field_detail s
                join dict_field_detail x
            on s.field_name = x.field_name
-          and coalesce(s.parent_path, '*') = coalesce(x.parent_path, '*')
+          and s.parent_path = x.parent_path
           and s.dataset_id = x.dataset_id
           where s.db_id = {db_id}
             and (x.sort_id <> s.sort_id
@@ -204,7 +204,7 @@ class HiveLoad:
         );
 
 
-       insert into dict_field_detail (
+       insert ignore into dict_field_detail (
           dataset_id, fields_layout_id, sort_id, parent_sort_id, parent_path,
           field_name, namespace, data_type, data_size, is_nullable, default_value,
            modified
@@ -298,6 +298,7 @@ class HiveLoad:
         set sdi.dataset_id = d.id where sdi.abstract_dataset_urn = d.urn
         and sdi.db_id = {db_id};
 
+
         INSERT INTO dict_dataset_instance
         ( dataset_id,
           db_id,
@@ -316,8 +317,8 @@ class HiveLoad:
           created_time,
           wh_etl_exec_id
         )
-        select s.dataset_id, s.db_id, s.deployment_tier, s.data_center,
-          s.server_cluster, s.slice, s.status_id, s.native_name, s.logical_name, s.version,
+        select s.dataset_id, s.db_id, s.deployment_tier, c.data_center, c.cluster,
+          s.slice, s.status_id, s.native_name, s.logical_name, s.version,
           case when s.version regexp '[0-9]+\.[0-9]+\.[0-9]+'
             then cast(substring_index(s.version, '.', 1) as unsigned) * 100000000 +
                  cast(substring_index(substring_index(s.version, '.', 2), '.', -1) as unsigned) * 10000 +
@@ -326,6 +327,7 @@ class HiveLoad:
           end version_sort_id, s.schema_text, s.ddl_text,
           s.instance_created_time, s.created_time, s.wh_etl_exec_id
         from stg_dict_dataset_instance s join dict_dataset d on s.dataset_id = d.id
+        join cfg_database c on c.db_id = {db_id}
         where s.db_id = {db_id}
         on duplicate key update
           deployment_tier=s.deployment_tier, data_center=s.data_center, server_cluster=s.server_cluster, slice=s.slice,
@@ -334,6 +336,7 @@ class HiveLoad:
             instance_created_time=s.instance_created_time, created_time=s.created_time, wh_etl_exec_id=s.wh_etl_exec_id
             ;
         """.format(source_file=self.input_instance_file, db_id=self.db_id, wh_etl_exec_id=self.wh_etl_exec_id)
+
 
       # didn't load into final table for now
 
@@ -428,7 +431,7 @@ class HiveLoad:
 if __name__ == "__main__":
   args = sys.argv[1]
 
-  l = HiveLoad()
+  l = HiveLoad(args[Constant.WH_EXEC_ID_KEY])
 
   # set up connection
   username = args[Constant.WH_DB_USERNAME_KEY]

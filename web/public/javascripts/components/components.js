@@ -102,6 +102,36 @@ App.DatasetSchemaComponent = Ember.Component.extend({
     }, 500);
   },
   actions: {
+    getSchema: function(){
+      var _this = this
+      var id = _this.get('dataset.id')
+      var columnUrl = 'api/v1/datasets/' + id + "/columns";
+      _this.set("isTable", true);
+      _this.set("isJSON", false);
+      $.get(columnUrl, function(data) {
+        if (data && data.status == "ok")
+        {
+          if (data.columns && (data.columns.length > 0))
+          {
+            _this.set("hasSchemas", true);
+            data.columns = data.columns.map(function(item, idx){
+              item.commentHtml = marked(item.comment).htmlSafe()
+              return item
+            })
+            _this.set("schemas", data.columns);
+            setTimeout(initializeColumnTreeGrid, 500);
+          }
+          else
+          {
+            _this.set("hasSchemas", false);
+          }
+        }
+        else
+        {
+          _this.set("hasSchemas", false);
+        }
+      });
+    },
     setView: function (view) {
       switch (view) {
         case "tabular":
@@ -130,10 +160,58 @@ App.DatasetSchemaComponent = Ember.Component.extend({
 App.DatasetSampleComponent = Ember.Component.extend({
 });
 
+App.DatasetAccessComponent = Ember.Component.extend({
+});
+
 App.DatasetImpactComponent = Ember.Component.extend({
 });
 
+App.DatasetOwnerListComponent = Ember.Component.extend({
+  tagName: 'section',
+  classNames: ['dataset-owner-list'],
+
+  ownersEmailList: Ember.computed('owners', function () {
+    // Reduce owner email to a string containing emails, each separated by comma
+    return this.get('owners').mapBy('email').filter(email => email).join(', ');
+  }),
+});
+
 App.DatasetAuthorComponent = Ember.Component.extend({
+  $ownerTable: null,
+
+  didInsertElement() {
+    this._super(...arguments);
+    // Cache reference to element on component
+    this.set('$ownerTable', this.$('[data-attribute=owner-table]'));
+
+    // Apply jQuery sortable plugin to element
+    this.get('$ownerTable')
+        .sortable({
+          start: (e, {item}) => this.set('startPosition', item.index()),
+
+          update: (e, {item}) => {
+            const startPosition = this.get('startPosition');
+            const endPosition = item.index(); // New position where UI element was dropped
+            const owners = this.get('owners') || [];
+
+            // Updates the owners array to reflect the UI position changes
+            if (owners.length) {
+              const _owners = owners.slice(0);
+              const updatedOwner = _owners.splice(startPosition, 1).pop();
+              _owners.splice(endPosition, 0, updatedOwner);
+              owners.setObjects(_owners);
+              setOwnerNameAutocomplete(this.controller);
+            }
+          }
+        });
+  },
+
+  willDestroyElement() {
+    this._super(...arguments);
+    // Removes the sortable functionality from the cached DOM element reference
+    this.get('$ownerTable').sortable('destroy');
+  },
+
   actions: {
     addOwner: function(data) {
       var owners = data;
@@ -169,6 +247,24 @@ App.DatasetAuthorComponent = Ember.Component.extend({
       if (owners && owner)
       {
         owners.removeObject(owner);
+      }
+    },
+    confirmOwner: function(owner, confirm) {
+      var obj = $('#loggedInUser');
+      if (obj)
+      {
+        var loggedInUser = obj.attr("title");
+        if (loggedInUser && owner)
+        {
+          if (confirm)
+          {
+            Ember.set(owner, "confirmedBy", loggedInUser);
+          }
+          else
+          {
+            Ember.set(owner, "confirmedBy", null);
+          }
+        }
       }
     },
     updateOwners: function(owners) {
@@ -506,11 +602,7 @@ App.DatasetCommentsComponent = Ember.Component.extend({
         _this.set('commentsLoading', false)
         var comments = data.data.comments
         comments.forEach(function(cmnt){
-          cmnt.isAuthor = false
-          cmnt.html = marked(cmnt.text).htmlSafe()
-          if(cmnt.authorUserName === $("#username").text().trim()) {
-            cmnt.isAuthor = true
-          }
+          cmnt.html = marked(cmnt.text).htmlSafe();
         })
         _this.set('comments', comments);
       }

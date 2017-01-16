@@ -17,9 +17,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.List;
 import models.daos.DatasetDao;
 import models.daos.UserDao;
-import models.utils.Urn;
+import utils.Urn;
 import org.springframework.dao.EmptyResultDataAccessException;
 import play.Logger;
 import play.libs.Json;
@@ -39,7 +40,7 @@ public class DatasetController extends Controller {
     if (datasetName != null) {
       ObjectNode result = UserDao.getWatchers(datasetName);
       resultJson.put("return_code", 200);
-      resultJson.put("watchers", result);
+      resultJson.set("watchers", result);
     }
     return ok(resultJson);
   }
@@ -47,7 +48,7 @@ public class DatasetController extends Controller {
   public static Result getDatasetInfo() throws SQLException {
     ObjectNode resultJson = Json.newObject();
     String datasetIdString = request().getQueryString("datasetId");
-    if(datasetIdString != null) {
+    if (datasetIdString != null) {
       int datasetId = Integer.valueOf(datasetIdString);
 
       try {
@@ -63,8 +64,8 @@ public class DatasetController extends Controller {
     }
 
     String urn = request().getQueryString("urn");
-    if(urn != null) {
-      if(!Urn.validateUrn(urn)) {
+    if (urn != null) {
+      if (!Urn.validateUrn(urn)) {
         resultJson.put("return_code", 400);
         resultJson.put("error_message", "Urn format wrong!");
         return ok(resultJson);
@@ -128,7 +129,7 @@ public class DatasetController extends Controller {
       if (propertiesLike != null) {
         ObjectNode result = DatasetDao.getDatasetUrnForPropertiesLike(propertiesLike);
         resultJson.put("return_code", 200);
-        resultJson.put("dataset_urns", result);
+        resultJson.set("dataset_urns", result);
       }
     } catch (Exception e) {
       e.printStackTrace();
@@ -136,6 +137,69 @@ public class DatasetController extends Controller {
       resultJson.put("error_message", e.getMessage());
     }
 
+    return ok(resultJson);
+  }
+
+  public static Result getDatasetDependentsById(Long datasetId)
+      throws SQLException {
+    ObjectNode resultJson = Json.newObject();
+    if (datasetId > 0) {
+      try {
+        List<Map<String, Object>> dependents = DatasetDao.getDatasetDependents(datasetId);
+        resultJson.put("return_code", 200);
+        resultJson.set("dependents", Json.toJson(dependents));
+      } catch (EmptyResultDataAccessException e) {
+        e.printStackTrace();
+        resultJson.put("return_code", 404);
+        resultJson.put("error_message", "no dependent datasets can be found!");
+      }
+      return ok(resultJson);
+    }
+    // if no parameter, return an error message
+    resultJson.put("return_code", 400);
+    resultJson.put("error_message", "Dataset Id is not provided or invalid");
+    return ok(resultJson);
+  }
+
+  public static Result getDatasetDependentsByUri(String datasetUri)
+      throws SQLException {
+    /* expect
+     * hive:///db_name.table_name
+     * hive:///db_name/table_name
+     * dalids:///db_name.table_name
+     * dalids:///db_name/table_name
+     * hdfs:///dir1/dir2/dir3/dir4
+     * teradata:///db_name/table_name
+     */
+    ObjectNode resultJson = Json.newObject();
+    String[] uri_parts = datasetUri.split(":");
+    if (uri_parts.length != 2) {
+      resultJson.put("return_code", 400);
+      resultJson.put("error_message", "Invalid dataset URI");
+      return ok(resultJson);
+    }
+    String dataset_type = uri_parts[0];
+    String dataset_path = uri_parts[1].substring(2);  // start from the 3rd slash
+    if (dataset_path.indexOf(".") > 0) {
+      dataset_path.replace(".", "/");
+    }
+
+    if (dataset_path != null) {
+      try {
+        List<Map<String, Object>> dependents = DatasetDao.getDatasetDependents(dataset_type, dataset_path);
+        resultJson.put("return_code", 200);
+        resultJson.set("dependents", Json.toJson(dependents));
+      } catch (EmptyResultDataAccessException e) {
+        e.printStackTrace();
+        resultJson.put("return_code", 404);
+        resultJson.put("error_message", "No dependent dataset can be found!");
+      }
+      return ok(resultJson);
+    }
+
+    // if no parameter, return an error message
+    resultJson.put("return_code", 400);
+    resultJson.put("error_message", "No parameter provided");
     return ok(resultJson);
   }
 }

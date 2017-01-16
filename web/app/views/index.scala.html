@@ -321,7 +321,7 @@
               </td>
               <td class="commentsArea">
                 <div class="commentsArea">
-                  {{#schema-comment schema=schema datasetId=this.model.id fieldId=schema.id getSchema="getSchema"}}{{/schema-comment}}
+                  {{#schema-comment schema=schema datasetId=dataset.id fieldId=schema.id}}{{/schema-comment}}
                   {{schema.commentHtml}}
                 </div>
               </td>
@@ -357,6 +357,35 @@
       {{/if}}
     </script>
 
+<script type="text/x-handlebars" id="components/dataset-owner-list">
+  {{#if owners}}
+    <header>
+      Owners:
+      <ul>
+        {{#each owners as |owner|}}
+          <li>
+            {{#if owner.email}}
+              <a title="Email {{owner.name}} about {{datasetName}}"
+                 href="mailto:{{owner.email}}?subject=RE: Dataset {{datasetName}}">
+                {{owner.name}}
+              </a>
+            {{else}}
+              {{owner.name}}
+            {{/if}}
+          </li>
+        {{/each}}
+      </ul>
+      {{#if ownersEmailList}}
+        <span>
+          <a title="Email all dataset owners" href="mailto: {{ownersEmailList}}">Ask a question?</a>
+        </span>
+      {{/if}}
+    </header>
+  {{else}}
+    No known owners for this dataset
+  {{/if}}
+</script>
+
     <script type="text/x-handlebars" id="components/dataset-author">
       <div class="row" style="margin-top: 5px; margin-bottom: 5px;">
         <div class="col-xs-12">
@@ -380,27 +409,37 @@
         <thead>
           <tr>
             <th class="col-xs-2">User Name</th>
-            <th class="col-xs-3">Full Name</th>
-            <th class="col-xs-1">Is Group</th>
+            <th class="col-xs-2">Full Name</th>
+            <th class="col-xs-1">Owner ID Type</th>
+            <th class="col-xs-1">Owner Source</th>
             <th class="col-xs-2">Owner Type</th>
             <th class="col-xs-2">Owner Sub Type</th>
+            <th class="col-xs-1">Confirmed</th>
             <th class="col-xs-1"></th>
           </tr>
         </thead>
-        <tbody id = "sortedownertable">
+        <tbody data-attribute="owner-table">
           {{#each owners as |owner|}}
           <tr>
             <td>{{input class="userEntity" value=owner.userName}}</td>
             <td>{{owner.name}}</td>
-            <td>
-              {{input type="checkbox" name="isGroup" checked=owner.isGroup disabled=true}}
-            </td>
+            <td>{{owner.idType}}</td>
+            <td>{{owner.source}}</td>
             <td>
               {{#ember-selector values=ownerTypes selected=owner.type}}
               {{/ember-selector}}
             </td>
             <td>
               {{input value=owner.subType}}
+            </td>
+            <td>
+              {{#if owner.confirmedBy}}
+                <i class="fa fa-check-square-o" title="Owner confirmed by {{owner.confirmedBy}}" {{action "confirmOwner" owner false}}>
+                </i>
+              {{else}}
+                <i class="fa fa-square-o" title="Please confirmed" {{action "confirmOwner" owner true}}>
+                </i>
+              {{/if}}
             </td>
             <td>
               <i class="fa fa-trash" title="remove this owner" {{action "removeOwner" owners owner}}>
@@ -472,310 +511,6 @@
       {{else}}
         <p>Impact analysis is not available</p>
       {{/if}}
-    </script>
-
-    <script type="text/x-handlebars" id="components/dataset-relations">
-      {{#if hasDepends}}
-        <table id="depends-table" class="columntreegrid tree table table-bordered dataset-detail-table">
-          <thead>
-            <tr class="results-header">
-              <th class="span2">Depends on</th>
-              <th class="span1">Object Type</th>
-              <th class="span1">Object Sub Type</th>
-              <th class="span2">Level</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{#each depends as |depend|}}
-            <tr class="{{depend.treeGridClass}}">
-              <td>
-                {{#if depend.isValidDataset}}
-                  <a href={{depend.datasetLink}}>
-                    {{depend.objectName}}
-                  </a>
-                {{else}}
-                  {{depend.objectName}}
-                {{/if}}
-              </td>
-              <td>{{depend.objectType}}</td>
-              <td>{{depend.objectSubType}}</td>
-              <td>{{depend.level}}</td>
-            </tr>
-            {{/each}}
-          </tbody>
-        </table>
-      {{/if}}
-      {{#if hasReferences}}
-        <table id="references-table" class="columntreegrid tree table table-bordered dataset-detail-table">
-          <thead>
-            <tr class="results-header">
-              <th class="span2">Referred By</th>
-              <th class="span1">Object Type</th>
-              <th class="span1">Object Sub Type</th>
-              <th class="span2">Level</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{#each references as |reference|}}
-            <tr class="{{reference.treeGridClass}}">
-              <td>
-                {{#if reference.isValidDataset}}
-                  <a href={{reference.datasetLink}}>
-                    {{reference.objectName}}
-                  </a>
-                {{else}}
-                  {{reference.objectName}}
-                {{/if}}
-              </td>
-              <td>{{reference.objectType}}</td>
-              <td>{{reference.objectSubType}}</td>
-              <td>{{reference.level}}</td>
-            </tr>
-            {{/each}}
-          </tbody>
-        </table>
-      {{/if}}
-    </script>
-
-    <script type="text/x-handlebars" id="components/metric-detail">
-      <div id="metric" class="container-fluid">
-        <div class="row-fluid">
-          <div class="col-xs-6">
-            <h3>{{ model.name }}</h3>
-          </div>
-          <div class="col-xs-6 text-right">
-            <ul class="datasetDetailsLinks">
-              <li>
-                <i class="fa fa-share-alt"></i>
-                <span class="hidden-sm hidden-xs">
-                  Share
-                </span>
-              </li>
-              <li>
-                {{#metric-watch metric=model showText=true getMetrics='getMetrics'}}
-                {{/metric-watch}}
-              </li>
-              {{#if showLineage}}
-              <li>
-                <a target="_blank" href={{lineageUrl}}>
-                  <i class="fa fa-sitemap"></i>
-                  <span class="hidden-sm hidden-xs">
-                    View Lineage
-                  </span>
-                </a>
-              </li>
-              {{/if}}
-            </ul>
-          </div>
-          <div class="col-xs-12">
-            Metric Description:
-            <a
-              href="#"
-              data-name="description"
-              data-pk="{{model.id}}"
-              class="xeditable"
-              data-type="text"
-              data-placement="right"
-              data-title="Enter description"
-              data-emptytext="Please Input"
-              data-placeholder="Please Input"
-            >
-              {{model.description}}
-            </a>
-          </div>
-        </div>
-        <table class="tree table table-bordered">
-          <tbody>
-            <tr class="result">
-              <td class="span2" style="min-width:200px;">Dashboard Name</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="dashboardName"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter dashboard name"
-                  data-defaultValue="Please Input"
-                  data-emptytext="Please Input"
-                  data-value="{{model.dashboardName}}"
-                >
-                  {{model.dashboardName}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Category</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="category"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter metric category"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                >
-                  {{model.category}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Group</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="group"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter group"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                >
-                  {{model.group}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Type</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="refIDType"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter Type"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                  data-value={{model.refIDType}}
-                >
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Grain</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="grain"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter grain"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                >
-                  {{model.grain}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Formula</td>
-              <td>
-                {{ace-editor content=model.formula itemId=model.id savePath="/api/v1/metrics/{id}/update" saveParam="formula"}}
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Display Factor</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="displayFactory"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter display factor"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                >
-                  {{model.displayFactory}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Display Factor Sym</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="displayFactorSym"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter display factor symbol"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                >
-                  {{model.displayFactorSym}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Sub Category</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="subCategory"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter sub category"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                >
-                  {{model.subCategory}}
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Source</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="source"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter source"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                  data-value={{model.source}}
-                >
-                </a>
-              </td>
-            </tr>
-            <tr class="result">
-              <td>Metric Source Type</td>
-              <td>
-                <a
-                  href="#"
-                  data-name="sourceType"
-                  data-pk="{{model.id}}"
-                  class="xeditable"
-                  data-type="text"
-                  data-placement="right"
-                  data-title="Enter source type"
-                  data-placement="right"
-                  data-emptytext="Please Input"
-                  data-value={{model.sourceType}}
-                >
-                </a>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </script>
 
     <script type="text/x-handlebars" id="dataset">
@@ -857,6 +592,7 @@
             </ul>
           </div>
         </div>
+        {{dataset-owner-list owners=owners datasetName=model.name}}
         {{#if hasinstances}}
           <div class="row">
             <span class="col-xs-1">Instances:</span>
@@ -932,6 +668,13 @@
               Relations
             </a>
           </li>
+          <li id="access">
+            <a data-toggle="tab"
+              title="Accessibilities"
+              href="#accesstab">
+              Accessibilities
+            </a>
+          </li>
         </ul>
         <div class="tab-content">
           {{#unless isPinot}}
@@ -949,8 +692,12 @@
             {{/dataset-schema}}
           </div>
           <div id="ownertab" class="tab-pane">
-            {{#dataset-author owners=owners ownerTypes=ownerTypes showMsg=showMsg alertType=alertType ownerMessage=ownerMessage parentController=this}}
-            {{/dataset-author}}
+            {{dataset-author owners=owners
+                             ownerTypes=ownerTypes
+                             showMsg=showMsg
+                             alertType=alertType
+                             ownerMessage=ownerMessage
+                             parentController=this}}
           </div>
           {{#unless isSFDC}}
             <div id="sampletab" class="tab-pane">
@@ -965,6 +712,10 @@
           <div id="dependtab" class="tab-pane">
             {{#dataset-relations hasDepends=hasDepends depends=depends hasReferences=hasReferences references=references}}
             {{/dataset-relations}}
+          </div>
+          <div id="accesstab" class="tab-pane">
+            {{#dataset-access hasAccess=hasAccess accessibilities=accessibilities}}
+            {{/dataset-access}}
           </div>
         </div>
       {{else}}
@@ -1035,8 +786,12 @@
           </div>
           <div id="ownership" class="panel-collapse collapse" role="tabpanel" aria-labelledby="ownershipHeading">
             <div class="panel-body">
-              {{#dataset-author owners=owners ownerTypes=ownerTypes showMsg=showMsg alertType=alertType ownerMessage=ownerMessage parentController=this}}
-              {{/dataset-author}}
+              {{dataset-author owners=owners
+                               ownerTypes=ownerTypes
+                               showMsg=showMsg
+                               alertType=alertType
+                               ownerMessage=ownerMessage
+                               parentController=this}}
             </div>
           </div>
         </div>
@@ -1091,6 +846,23 @@
             <div class="panel-body">
               {{#dataset-relations hasDepends=hasDepends depends=depends hasReferences=hasReferences references=references}}
               {{/dataset-relations}}
+            </div>
+          </div>
+        </div>
+
+        <div class="panel panel-default">
+          <div class="panel-heading" role="tab" id="accessHeading">
+            <h4 class="panel-title">
+              <a class="collapsed" data-toggle="collapse" data-parent="#accordion"
+               href="#accessview" aria-expanded="false" aria-controls="accessData">
+                Accessiblities
+              </a>
+            </h4>
+          </div>
+          <div id="accessview" class="panel-collapse collapse" role="tabpanel" aria-labelledby="accessHeading">
+            <div class="panel-body">
+              {{#dataset-access hasAccess=hasAccess accessibilities=accessibilities}}
+              {{/dataset-access}}
             </div>
           </div>
         </div>

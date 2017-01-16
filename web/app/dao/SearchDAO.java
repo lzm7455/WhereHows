@@ -28,11 +28,11 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import play.Logger;
 import play.Play;
-import play.libs.F;
+import play.libs.F.Promise;
 import play.libs.Json;
+import play.libs.ws.*;
 import play.cache.Cache;
 import models.*;
-import play.libs.WS;
 
 public class SearchDAO extends AbstractMySQLOpenSourceDAO
 {
@@ -202,15 +202,35 @@ public class SearchDAO extends AbstractMySQLOpenSourceDAO
 
 		if (keywordNode != null)
 		{
-			queryNode.put("query", keywordNode);
-			F.Promise < WS.Response> responsePromise = WS.url(Play.application().configuration().getString(
+			ObjectNode funcScoreNodes = Json.newObject();
+
+			ObjectNode fieldValueFactorNode = Json.newObject();
+			fieldValueFactorNode.put("field","static_boosting_score");
+			fieldValueFactorNode.put("factor",1);
+			fieldValueFactorNode.put("modifier","square");
+			fieldValueFactorNode.put("missing",1);
+
+			funcScoreNodes.put("query", keywordNode);
+			funcScoreNodes.put("field_value_factor",fieldValueFactorNode);
+
+			ObjectNode funcScoreNodesWrapper = Json.newObject();
+			funcScoreNodesWrapper.put("function_score",funcScoreNodes);
+
+			queryNode.put("query",funcScoreNodesWrapper);
+
+			Logger.debug("The query sent to Elastic Search is: " + queryNode.toString());
+
+			Promise<WSResponse> responsePromise = WS.url(Play.application().configuration().getString(
 					SearchDAO.ELASTICSEARCH_DATASET_URL_KEY)).post(queryNode);
-			responseNode = responsePromise.get().asJson();
+			responseNode = responsePromise.get(1000).asJson();
+
+			Logger.debug("The responseNode from Elastic Search is: " + responseNode.toString());
+
 		}
 
 		ObjectNode resultNode = Json.newObject();
 		Long count = 0L;
-		List<Dataset> pagedDatasets = new ArrayList<Dataset>();
+		List<Dataset> pagedDatasets = new ArrayList<>();
 		resultNode.put("page", page);
 		resultNode.put("category", category);
 		resultNode.put("source", source);
@@ -303,15 +323,15 @@ public class SearchDAO extends AbstractMySQLOpenSourceDAO
 
 		if (keywordNode != null)
 		{
-			queryNode.put("query", keywordNode);
-			F.Promise < WS.Response> responsePromise = WS.url(Play.application().configuration().getString(
+			queryNode.set("query", keywordNode);
+			Promise<WSResponse> responsePromise = WS.url(Play.application().configuration().getString(
 					SearchDAO.ELASTICSEARCH_METRIC_URL_KEY)).post(queryNode);
-			responseNode = responsePromise.get().asJson();
+			responseNode = responsePromise.get(1000).asJson();
 		}
 
 		ObjectNode resultNode = Json.newObject();
 		Long count = 0L;
-		List<Metric> pagedMetrics = new ArrayList<Metric>();
+		List<Metric> pagedMetrics = new ArrayList<>();
 		resultNode.put("page", page);
 		resultNode.put("category", category);
 		resultNode.put("isMetrics", true);
@@ -413,15 +433,15 @@ public class SearchDAO extends AbstractMySQLOpenSourceDAO
 
 		if (keywordNode != null)
 		{
-			queryNode.put("query", keywordNode);
-			F.Promise < WS.Response> responsePromise = WS.url(Play.application().configuration().getString(
+			queryNode.set("query", keywordNode);
+			Promise<WSResponse> responsePromise = WS.url(Play.application().configuration().getString(
 					SearchDAO.ELASTICSEARCH_FLOW_URL_KEY)).post(queryNode);
-			responseNode = responsePromise.get().asJson();
+			responseNode = responsePromise.get(1000).asJson();
 		}
 
 		ObjectNode resultNode = Json.newObject();
 		Long count = 0L;
-		List<FlowJob> pagedFlowJobs = new ArrayList<FlowJob>();
+		List<FlowJob> pagedFlowJobs = new ArrayList<>();
 		resultNode.put("page", page);
 		resultNode.put("category", category);
 		resultNode.put("isFlowJob", true);

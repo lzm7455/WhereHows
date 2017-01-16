@@ -71,6 +71,10 @@ GET     /api/v1/datasets/:id/depends        controllers.api.v1.Dataset.getDepend
 
 GET     /api/v1/datasets/:id/references     controllers.api.v1.Dataset.getReferenceViews(id:Long)
 
+GET     /api/v1/datasets/:id/partitions     controllers.api.v1.Dataset.getDatasetPartitions(id:Long)
+
+GET     /api/v1/datasets/:id/access         controllers.api.v1.Dataset.getDatasetAccess(id:Long)
+
 GET     /api/v1/datasets/:id/properties     controllers.api.v1.Dataset.getDatasetPropertiesByID(id:Int)
 
 GET     /api/v1/datasets/:id/sample         controllers.api.v1.Dataset.getDatasetSampleDataByID(id:Int)
@@ -104,6 +108,14 @@ DELETE  /api/v1/datasets/:id/columns/:columnId/comments/:commentId  controllers.
 POST    /api/v1/datasets/:id/watch                  controllers.api.v1.Dataset.watchDataset(id:Int)
 
 DELETE  /api/v1/datasets/:id/watch/:watchId         controllers.api.v1.Dataset.unwatchDataset(id:Int, watchId:Int)
+
+GET     /api/v1/datasets/:id/compliance             controllers.api.v1.Dataset.getDatasetCompliance(id:Int)
+
+POST    /api/v1/datasets/:id/compliance             controllers.api.v1.Dataset.updateDatasetCompliance(id:Int)
+
+GET     /api/v1/datasets/:id/security               controllers.api.v1.Dataset.getDatasetSecurity(id:Int)
+
+POST    /api/v1/datasets/:id/security               controllers.api.v1.Dataset.updateDatasetSecurity(id:Int)
 
 GET     /api/v1/urn/watch                           controllers.api.v1.Dataset.getWatchedUrnId()
 
