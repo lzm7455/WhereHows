@@ -13,7 +13,6 @@
  */
 package dao;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
 
@@ -27,9 +26,9 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import play.Logger;
-import play.Play;
 import play.libs.Json;
 import utils.Lineage;
+
 
 public class LineageDAO extends AbstractMySQLOpenSourceDAO
 {
@@ -41,8 +40,8 @@ public class LineageDAO extends AbstractMySQLOpenSourceDAO
 
 	private final static String GET_JOB = "SELECT ca.app_id, ca.app_code as cluster, " +
 			"jedl.job_name, fj.job_path, fj.job_type, jedl.flow_path, jedl.storage_type, jedl.source_target_type, " +
-			"jedl.operation, jedl.source_srl_no, jedl.srl_no, " +
-			"max(jedl.job_exec_id) as job_exec_id FROM job_execution_data_lineage jedl " +
+			"jedl.operation, MAX(jedl.source_srl_no), MAX(jedl.srl_no), " +
+			"MAX(jedl.job_exec_id) as job_exec_id FROM job_execution_data_lineage jedl " +
 			"JOIN cfg_application ca on ca.app_id = jedl.app_id " +
 			"LEFT JOIN job_execution je on jedl.app_id = je.app_id " +
 			"and jedl.flow_exec_id = je.flow_exec_id and jedl.job_exec_id = je.job_exec_id " +
@@ -50,14 +49,14 @@ public class LineageDAO extends AbstractMySQLOpenSourceDAO
 			"WHERE abstracted_object_name in ( :names ) and " +
 			"jedl.flow_path not REGEXP '^(rent-metrics:|tracking-investigation:)' and " +
 			"FROM_UNIXTIME(job_finished_unixtime) >  CURRENT_DATE - INTERVAL (:days) DAY " +
-			"GROUP BY ca.app_id, cluster, jedl.job_name, jedl.flow_path, jedl.source_target_type, " +
+			"GROUP BY ca.app_id, cluster, jedl.job_name, fj.job_path, fj.job_type, jedl.flow_path, jedl.source_target_type, " +
 			"jedl.storage_type, jedl.operation " +
-			"ORDER BY jedl.source_target_type DESC, jedl.job_finished_unixtime";
+			"ORDER BY jedl.source_target_type DESC, job_exec_id";
 
 	private final static String GET_UP_LEVEL_JOB = "SELECT ca.app_id, ca.app_code as cluster, " +
 			"jedl.job_name, fj.job_path, fj.job_type, jedl.flow_path, jedl.storage_type, jedl.source_target_type, " +
-			"jedl.operation, jedl.source_srl_no, jedl.srl_no, " +
-			"max(jedl.job_exec_id) as job_exec_id FROM job_execution_data_lineage jedl " +
+			"jedl.operation, MAX(jedl.source_srl_no), MAX(jedl.srl_no), " +
+			"MAX(jedl.job_exec_id) as job_exec_id FROM job_execution_data_lineage jedl " +
 			"JOIN cfg_application ca on ca.app_id = jedl.app_id " +
 			"LEFT JOIN job_execution je on jedl.app_id = je.app_id " +
 			"and jedl.flow_exec_id = je.flow_exec_id and jedl.job_exec_id = je.job_exec_id " +
@@ -65,14 +64,14 @@ public class LineageDAO extends AbstractMySQLOpenSourceDAO
 			"WHERE abstracted_object_name in ( :names ) and jedl.source_target_type = 'target' and " +
 			"jedl.flow_path not REGEXP '^(rent-metrics:|tracking-investigation:)' and " +
 			"FROM_UNIXTIME(job_finished_unixtime) >  CURRENT_DATE - INTERVAL (:days) DAY " +
-			"GROUP BY ca.app_id, cluster, jedl.job_name, jedl.flow_path, jedl.source_target_type, " +
+			"GROUP BY ca.app_id, cluster, jedl.job_name, fj.job_path, fj.job_type, jedl.flow_path, jedl.source_target_type, " +
 			"jedl.storage_type, jedl.operation " +
-			"ORDER BY jedl.source_target_type DESC, jedl.job_finished_unixtime";
+			"ORDER BY jedl.source_target_type DESC, job_exec_id";
 
 	private final static String GET_JOB_WITH_SOURCE = "SELECT ca.app_id, ca.app_code as cluster, " +
 			"jedl.job_name, fj.job_path, fj.job_type, jedl.flow_path, jedl.storage_type, jedl.source_target_type, " +
-			"jedl.operation, jedl.source_srl_no, jedl.srl_no, " +
-			"max(jedl.job_exec_id) as job_exec_id FROM job_execution_data_lineage jedl " +
+			"jedl.operation, MAX(jedl.source_srl_no), MAX(jedl.srl_no), " +
+			"MAX(jedl.job_exec_id) as job_exec_id FROM job_execution_data_lineage jedl " +
 			"JOIN cfg_application ca on ca.app_id = jedl.app_id " +
 			"LEFT JOIN job_execution je on jedl.app_id = je.app_id " +
 			"and jedl.flow_exec_id = je.flow_exec_id and jedl.job_exec_id = je.job_exec_id " +
@@ -80,9 +79,9 @@ public class LineageDAO extends AbstractMySQLOpenSourceDAO
 			"WHERE abstracted_object_name in ( :names ) and jedl.source_target_type != (:type) and " +
 			"jedl.flow_path not REGEXP '^(rent-metrics:|tracking-investigation:)' and " +
 			"FROM_UNIXTIME(job_finished_unixtime) >  CURRENT_DATE - INTERVAL (:days) DAY " +
-			"GROUP BY ca.app_id, cluster, jedl.job_name, jedl.flow_path, jedl.source_target_type, " +
+			"GROUP BY ca.app_id, cluster, jedl.job_name, fj.job_path, fj.job_type, jedl.flow_path, jedl.source_target_type, " +
 			"jedl.storage_type, jedl.operation " +
-			"ORDER BY jedl.source_target_type DESC, jedl.job_finished_unixtime";
+			"ORDER BY jedl.source_target_type DESC, job_exec_id";
 
 	private final static String GET_DATA = "SELECT storage_type, operation, " +
 			"abstracted_object_name, source_target_type, job_start_unixtime, job_finished_unixtime, " +
@@ -278,7 +277,7 @@ public class LineageDAO extends AbstractMySQLOpenSourceDAO
 					{
 						if (target.partition_end != null)
 						{
-							if (target.partition_end == node.partition_end)
+							if (target.partition_end.equals(node.partition_end))
 							{
 								existNode = target;
 								break;

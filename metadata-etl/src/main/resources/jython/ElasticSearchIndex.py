@@ -14,12 +14,9 @@
 
 from wherehows.common import Constant
 from com.ziclix.python.sql import zxJDBC
-import DbUtil
-import sys
-import json
-import urllib
-import urllib2
 from org.slf4j import LoggerFactory
+import sys, json
+import urllib2
 
 
 class ElasticSearchIndex():
@@ -202,7 +199,7 @@ class ElasticSearchIndex():
           static_boosting_score = 65;
 
           SELECT d.*,
-              COALESCE(s.static_boosting_score,0) as static_boosting_score
+              COALESCE(s.static_boosting_score,1) as static_boosting_score
           FROM dict_dataset d
           LEFT JOIN cfg_search_score_boost s
           ON d.id = s.id
